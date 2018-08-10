@@ -37,6 +37,7 @@ path = "point_viewer_proto_rust"
 [workspace]
 members = [
    "point_viewer_grpc",
+   "point_viewer_tower_grpc",
    "point_viewer_grpc_proto_rust",
    "point_viewer_proto_rust",
    "quadtree",
