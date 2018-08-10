@@ -938,6 +938,9 @@ name = "point_viewer_tower_grpc"
 version = "0.1.0"
 dependencies = [
  "bytes 0.4.9 (registry+https://github.com/rust-lang/crates.io-index)",
+ "cgmath 0.16.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "clap 2.32.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "collision 0.18.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "futures 0.1.23 (registry+https://github.com/rust-lang/crates.io-index)",
  "point_viewer 0.1.0",
  "prost 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)",

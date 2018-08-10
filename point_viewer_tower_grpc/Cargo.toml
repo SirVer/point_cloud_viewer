@@ -20,3 +20,6 @@ tower-h2 = { git = "https://github.com/tower-rs/tower-h2" }
 tower-http = { git = "https://github.com/tower-rs/tower-http" }
 tower-service = { git = "https://github.com/tower-rs/tower" }
 point_viewer = { path = ".." }
+cgmath = "0.16.0"
+collision = "0.18.0"
+clap = "^2.31.2"
