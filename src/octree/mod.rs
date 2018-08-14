@@ -322,6 +322,7 @@ impl Octree for OnDiskOctree {
 
         // TODO(hrapp): If we'd randomize the points while writing, we could just read the
         // first N points instead of reading everything and skipping over a few.
+        let now = ::std::time::Instant::now();
         let position = {
             let mut xyz_reader =
                 BufReader::new(File::open(&stem.with_extension(node::POSITION_EXT))?);
@@ -331,6 +332,8 @@ impl Octree for OnDiskOctree {
                 .chain_err(|| "Could not read position")?;
             all_data
         };
+        println!("Reading pos: {:?}", now.elapsed());
+        let now = ::std::time::Instant::now();
 
         let color = {
             let mut rgb_reader = BufReader::new(File::open(&stem.with_extension(node::COLOR_EXT))
@@ -341,6 +344,7 @@ impl Octree for OnDiskOctree {
                 .chain_err(|| "Could not read color")?;
             all_data
         };
+        println!("Reading color: {:?}", now.elapsed());
 
         Ok(NodeData {
             position: position,
