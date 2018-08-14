@@ -25,6 +25,8 @@ use std::collections::BinaryHeap;
 use std::fs::File;
 use std::io::{BufReader, Cursor, Read};
 use std::path::{Path, PathBuf};
+use lmdb::{self, Transaction};
+
 
 mod node;
 
@@ -115,7 +117,7 @@ impl<'a> InternalIterator for PointsInBoxIterator<'a> {
     }
 }
 
-pub fn read_meta_proto<P: AsRef<Path>>(directory: P) -> Result<proto::Meta> {
+pub fn read_old_meta_proto<P: AsRef<Path>>(directory: P) -> Result<proto::Meta> {
     // We used to use JSON earlier.
     if directory.as_ref().join("meta.json").exists() {
         return Err(ErrorKind::InvalidVersion(3).into());
@@ -123,6 +125,28 @@ pub fn read_meta_proto<P: AsRef<Path>>(directory: P) -> Result<proto::Meta> {
 
     let mut data = Vec::new();
     File::open(&directory.as_ref().join("meta.pb"))?.read_to_end(&mut data)?;
+    Ok(
+        protobuf::parse_from_reader::<proto::Meta>(&mut Cursor::new(data))
+            .chain_err(|| "Could not parse meta.pb")?,
+    )
+}
+
+pub fn read_meta_proto<P: AsRef<Path>>(directory: P) -> Result<proto::Meta> {
+    let env = lmdb::Environment::new()
+        .open(Path::new(directory.as_ref())).unwrap();
+    let db = env.open_db(None).unwrap();
+
+    let txn = env.begin_ro_txn().unwrap();
+    let data = txn.get(db, b"meta").unwrap();
+
+
+    // // We used to use JSON earlier.
+    // if directory.as_ref().join("meta.json").exists() {
+        // return Err(ErrorKind::InvalidVersion(3).into());
+    // }
+
+    // let mut data = Vec::new();
+    // File::open(&directory.as_ref().join("meta.pb"))?.read_to_end(&mut data)?;
     Ok(
         protobuf::parse_from_reader::<proto::Meta>(&mut Cursor::new(data))
             .chain_err(|| "Could not parse meta.pb")?,
@@ -318,29 +342,42 @@ impl Octree for OnDiskOctree {
     }
 
     fn get_node_data(&self, node_id: &NodeId) -> Result<NodeData> {
-        let stem = node_id.get_stem(&self.meta.directory);
+        // let stem = node_id.get_stem(&self.meta.directory);
 
         // TODO(hrapp): If we'd randomize the points while writing, we could just read the
         // first N points instead of reading everything and skipping over a few.
+        let now = ::std::time::Instant::now();
+        let env = lmdb::Environment::new()
+            .open(Path::new(&self.meta.directory)).unwrap();
+        println!("Opening env: {:?}", now.elapsed());
+
+        let now = ::std::time::Instant::now();
+        let db = env.open_db(None).unwrap();
+        println!("Opening db: {:?}", now.elapsed());
+
+        let now = ::std::time::Instant::now();
+        let txn = env.begin_ro_txn().unwrap();
+        println!("Creating tx: {:?}", now.elapsed());
+
+        let now = ::std::time::Instant::now();
         let position = {
-            let mut xyz_reader =
-                BufReader::new(File::open(&stem.with_extension(node::POSITION_EXT))?);
-            let mut all_data = Vec::new();
-            xyz_reader
-                .read_to_end(&mut all_data)
-                .chain_err(|| "Could not read position")?;
-            all_data
+            let key = format!("{}.xyz", node_id);
+            txn.get(db, &key).unwrap().to_vec()
+
+            // let mut xyz_reader =
+                // BufReader::new(File::open(&stem.with_extension(node::POSITION_EXT))?);
+            // let mut all_data = Vec::new();
+            // xyz_reader
+                // .read_to_end(&mut all_data)
+                // .chain_err(|| "Could not read position")?;
+            // all_data
         };
 
         let color = {
-            let mut rgb_reader = BufReader::new(File::open(&stem.with_extension(node::COLOR_EXT))
-                .chain_err(|| "Could not read color")?);
-            let mut all_data = Vec::new();
-            rgb_reader
-                .read_to_end(&mut all_data)
-                .chain_err(|| "Could not read color")?;
-            all_data
+            let key = format!("{}.rgb", node_id);
+            txn.get(db, &key).unwrap().to_vec()
         };
+        println!("Done reading data: {:?}", now.elapsed());
 
         Ok(NodeData {
             position: position,

@@ -18,6 +18,7 @@
 #![recursion_limit = "1024"]
 
 extern crate byteorder;
+extern crate lmdb;
 extern crate cgmath;
 extern crate collision;
 #[macro_use]
