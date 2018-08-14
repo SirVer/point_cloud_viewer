@@ -84,6 +84,7 @@ fn relative_size_on_screen(bounding_cube: &Cube, matrix: &Matrix4<f32>) -> f32 {
 pub struct OnDiskOctree {
     meta: OctreeMeta,
     nodes: FnvHashMap<NodeId, NodeMeta>,
+    env: lmdb::Environment,
 }
 
 pub trait Octree: Send + Sync {
@@ -198,7 +199,11 @@ impl OnDiskOctree {
                 },
             );
         }
-        Ok(OnDiskOctree { meta, nodes })
+
+        let env = lmdb::Environment::new()
+            .open(Path::new(&meta.directory)).unwrap();
+
+        Ok(OnDiskOctree { meta, nodes, env })
     }
 
     pub fn new<P: AsRef<Path>>(directory: P) -> Result<Self> {
@@ -346,20 +351,9 @@ impl Octree for OnDiskOctree {
 
         // TODO(hrapp): If we'd randomize the points while writing, we could just read the
         // first N points instead of reading everything and skipping over a few.
-        let now = ::std::time::Instant::now();
-        let env = lmdb::Environment::new()
-            .open(Path::new(&self.meta.directory)).unwrap();
-        println!("Opening env: {:?}", now.elapsed());
+        let db = self.env.open_db(None).unwrap();
+        let txn = self.env.begin_ro_txn().unwrap();
 
-        let now = ::std::time::Instant::now();
-        let db = env.open_db(None).unwrap();
-        println!("Opening db: {:?}", now.elapsed());
-
-        let now = ::std::time::Instant::now();
-        let txn = env.begin_ro_txn().unwrap();
-        println!("Creating tx: {:?}", now.elapsed());
-
-        let now = ::std::time::Instant::now();
         let position = {
             let key = format!("{}.xyz", node_id);
             txn.get(db, &key).unwrap().to_vec()
@@ -377,7 +371,6 @@ impl Octree for OnDiskOctree {
             let key = format!("{}.rgb", node_id);
             txn.get(db, &key).unwrap().to_vec()
         };
-        println!("Done reading data: {:?}", now.elapsed());
 
         Ok(NodeData {
             position: position,
