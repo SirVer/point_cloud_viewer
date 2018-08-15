@@ -1,5 +1,6 @@
 extern crate lmdb;
 extern crate point_viewer;
+extern crate pbr;
 
 use std::path::Path;
 use std::fs::File;
@@ -26,7 +27,7 @@ pub fn main() {
     let mut txn = env.begin_rw_txn().unwrap();
     put_file(db, &mut txn, "meta", &directory.join("meta.pb"));
 
-    for node in &meta.nodes {
+    for node in pbr::PbIter::new(meta.nodes.iter()) {
         let node_id = NodeId::from_level_index(
             node.id.as_ref().unwrap().level as u8,
             node.id.as_ref().unwrap().index as usize,
