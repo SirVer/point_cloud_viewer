@@ -15,13 +15,13 @@ fn put_file<'a>(db: lmdb::Database, txn: &mut lmdb::RwTransaction<'a>, key: &str
 }
 
 pub fn main() {
-    let directory = Path::new("/Users/hrapp/Downloads/pointcloud_just_colors/");
+    let directory = Path::new("/Users/sirver/Downloads/pointcloud_just_colors/");
     let meta = point_viewer::octree::read_old_meta_proto(directory).unwrap();
 
     const SIZE: usize = 10*1024*1024*1024;
     let env = lmdb::Environment::new()
         .set_map_size(SIZE)
-        .open(Path::new("/Users/hrapp/Downloads/pointcloud_just_colors.rocksdb")).unwrap();
+        .open(Path::new("/Users/sirver/Downloads/pointcloud_just_colors.rocksdb")).unwrap();
     let db = env.create_db(None, lmdb::DatabaseFlags::empty()).unwrap();
 
     let mut txn = env.begin_rw_txn().unwrap();
