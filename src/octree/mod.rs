@@ -23,9 +23,9 @@ use protobuf;
 use std::cmp::Ordering;
 use std::collections::BinaryHeap;
 use std::fs::File;
-use std::io::{BufReader, Cursor, Read};
+use std::io::{Cursor, Read};
 use std::path::{Path, PathBuf};
-use lmdb::{self, Transaction};
+use sled;
 
 
 mod node;
@@ -84,7 +84,7 @@ fn relative_size_on_screen(bounding_cube: &Cube, matrix: &Matrix4<f32>) -> f32 {
 pub struct OnDiskOctree {
     meta: OctreeMeta,
     nodes: FnvHashMap<NodeId, NodeMeta>,
-    env: lmdb::Environment,
+    tree: sled::Tree,
 }
 
 pub trait Octree: Send + Sync {
@@ -133,12 +133,12 @@ pub fn read_old_meta_proto<P: AsRef<Path>>(directory: P) -> Result<proto::Meta> 
 }
 
 pub fn read_meta_proto<P: AsRef<Path>>(directory: P) -> Result<proto::Meta> {
-    let env = lmdb::Environment::new()
-        .open(Path::new(directory.as_ref())).unwrap();
-    let db = env.open_db(None).unwrap();
+    let config = sled::ConfigBuilder::new()
+      .path(directory.as_ref())
+      .build();
+    let tree = sled::Tree::start(config).unwrap();
 
-    let txn = env.begin_ro_txn().unwrap();
-    let data = txn.get(db, b"meta").unwrap();
+    let data = tree.get(b"meta").unwrap().unwrap();
 
 
     // // We used to use JSON earlier.
@@ -200,10 +200,11 @@ impl OnDiskOctree {
             );
         }
 
-        let env = lmdb::Environment::new()
-            .open(Path::new(&meta.directory)).unwrap();
-
-        Ok(OnDiskOctree { meta, nodes, env })
+        let config = sled::ConfigBuilder::new()
+            .path(&meta.directory)
+            .build();
+        let tree = sled::Tree::start(config).unwrap();
+        Ok(OnDiskOctree { meta, nodes, tree })
     }
 
     pub fn new<P: AsRef<Path>>(directory: P) -> Result<Self> {
@@ -351,12 +352,9 @@ impl Octree for OnDiskOctree {
 
         // TODO(hrapp): If we'd randomize the points while writing, we could just read the
         // first N points instead of reading everything and skipping over a few.
-        let db = self.env.open_db(None).unwrap();
-        let txn = self.env.begin_ro_txn().unwrap();
-
         let position = {
             let key = format!("{}.xyz", node_id);
-            txn.get(db, &key).unwrap().to_vec()
+            self.tree.get(key.as_bytes()).unwrap().unwrap()
 
             // let mut xyz_reader =
                 // BufReader::new(File::open(&stem.with_extension(node::POSITION_EXT))?);
@@ -369,7 +367,7 @@ impl Octree for OnDiskOctree {
 
         let color = {
             let key = format!("{}.rgb", node_id);
-            txn.get(db, &key).unwrap().to_vec()
+            self.tree.get(key.as_bytes()).unwrap().unwrap()
         };
 
         Ok(NodeData {
