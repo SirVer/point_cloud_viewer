@@ -20,6 +20,7 @@ pub fn main() {
     const SIZE: usize = 10*1024*1024*1024;
     let config = sled::ConfigBuilder::new()
       .path("/Users/sirver/Downloads/pointcloud_just_colors.sled")
+      .use_compression(false)
       .cache_capacity(SIZE)
       .build();
     let mut tree = sled::Tree::start(config).unwrap();
