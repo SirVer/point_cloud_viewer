@@ -22,6 +22,7 @@ pub fn main() {
       .path("/Users/sirver/Downloads/pointcloud_just_colors.sled")
       .use_compression(false)
       .cache_capacity(SIZE)
+      .zero_copy_storage(true)
       .build();
     let mut tree = sled::Tree::start(config).unwrap();
 
