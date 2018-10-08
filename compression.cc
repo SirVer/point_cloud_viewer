@@ -4,6 +4,7 @@
 
 #include "draco/compression/encode.h"
 #include "draco/io/point_cloud_io.h"
+#include "draco/attributes/attribute_quantization_transform.h"
 
 // NOCOM(#sirver): should be compatible to Point in src/lib.rs
 struct Point {
@@ -60,9 +61,7 @@ int32_t encode_points(const Point *points, uint32_t num_points,
 
   // NOCOM(#sirver): look into fast memory copy path in PointCloudBuilder.
   // std::cerr << "ALIVE 4" << std::endl;
-  double sum_red = 0;
   for (draco::PointIndex i(0); i < num_points; ++i) {
-	  sum_red += points[i.value()].color[3];
 	  {
 		  draco::PointAttribute *att = pc.attribute(pos_att_id);
 		  att->SetAttributeValue(att->mapped_index(i), &points[i.value()].position[0]);
@@ -93,7 +92,7 @@ int32_t encode_points(const Point *points, uint32_t num_points,
   // // Setup encoder options.
   // if (options.pos_quantization_bits > 0) {
   encoder.SetAttributeQuantization(draco::GeometryAttribute::POSITION, min_bits);
-  encoder.SetAttributeQuantization(draco::GeometryAttribute::COLOR, 32);
+  encoder.SetAttributeQuantization(draco::GeometryAttribute::COLOR, 8);
   encoder.SetAttributeQuantization(draco::GeometryAttribute::GENERIC, 32);
   // }
   // if (options.tex_coords_quantization_bits > 0) {
@@ -121,9 +120,22 @@ int32_t encode_points(const Point *points, uint32_t num_points,
   // std::cerr << "buffer.size(): " << buffer.size() << std::endl;
   memcpy(output_buffer, buffer.data(), buffer.size());
   *output_len = buffer.size();
+
+  decode the output here just to see that it works.
+
+
   // std::cerr << "ALIVE 9" << std::endl;
   return SUCCESS;
 }
+
+  int GetQuantizationBitsFromAttribute(const draco::PointAttribute *att) {
+    if (att == nullptr)
+      return -1;
+    draco::AttributeQuantizationTransform transform;
+    if (!transform.InitFromAttribute(*att))
+      return -1;
+    return transform.quantization_bits();
+  }
 
 int decode_points(const char *buffer, uint32_t len, uint32_t expected_num_points,
 		Point *points) {
@@ -131,7 +143,9 @@ int decode_points(const char *buffer, uint32_t len, uint32_t expected_num_points
 	decoder_buffer.Init(buffer, len);
 
 	draco::Decoder decoder;
-  // decoder.SetAttributeQuantization(draco::GeometryAttribute::POSITION, min_bits);
+	decoder.options()->SetAttributeInt(draco::GeometryAttribute::POSITION, "quantization_bits", 10);
+	decoder.options()->SetAttributeInt(draco::GeometryAttribute::COLOR, "quantization_bits", 8);
+	decoder.options()->SetAttributeInt(draco::GeometryAttribute::GENERIC, "quantization_bits", 32);
   // decoder.SetAttributeQuantization(draco::GeometryAttribute::COLOR, 32);
   // decoder.SetAttributeQuantization(draco::GeometryAttribute::GENERIC, 32);
 
