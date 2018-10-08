@@ -13,9 +13,13 @@
 # limitations under the License.
 
 [package]
+links = "draco"
 authors = ["Holger Rapp <hrapp@google.com>"]
 name = "point_viewer"
 version = "0.1.0"
+
+[build-dependencies]
+cc = "1.0"
 
 [dependencies]
 byteorder = "^0.5.3"

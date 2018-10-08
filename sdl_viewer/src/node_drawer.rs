@@ -154,15 +154,10 @@ impl NodeView {
         let mut rng = thread_rng();
         rng.shuffle(&mut indices);
 
-        let position = reshuffle(
-            &indices,
-            &node_data.position,
-            match node_data.meta.position_encoding {
-                octree::PositionEncoding::Uint8 => 3,
-                octree::PositionEncoding::Uint16 => 6,
-                octree::PositionEncoding::Float32 => 12,
-            },
-        );
+        let position = unsafe {
+            let ptr = ::std::slice::from_raw_parts(node_data.position.as_ptr() as *const u8, node_data.meta.num_points as usize * 12);
+            reshuffle(&indices, &ptr, 12)
+        };
         let color = reshuffle(&indices, &node_data.color, 3);
 
         let buffer_position = GlBuffer::new_array_buffer(Rc::clone(&program.gl));

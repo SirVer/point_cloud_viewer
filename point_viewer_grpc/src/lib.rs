@@ -108,7 +108,8 @@ impl Octree for GrpcOctree {
         let reply = self.client.get_node_data(&req).expect("rpc");
         let node = reply.node.unwrap();
         let result = NodeData {
-            position: reply.position,
+            // NOCOM(#sirver): broken
+            position: Vec::new(), 
             color: reply.color,
             meta: NodeMeta {
                 num_points: node.num_points,

@@ -17,5 +17,6 @@ void main() {
     vec3 corrected_color = pow(color / 255., vec3(1.0 / gamma));
     v_color = vec4(corrected_color, 1.);
     gl_PointSize = size;
-    gl_Position = world_to_gl * vec4(position * edge_length + min, 1.0);
+    // gl_Position = world_to_gl * vec4(position * edge_length + min, 1.0);
+    gl_Position = world_to_gl * vec4(position, 1.0);
 }

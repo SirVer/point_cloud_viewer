@@ -14,6 +14,7 @@
 
 // Entries follow GL semantics: they are in [0.; 1.] with 1. being fully saturated.
 #[derive(Debug, Copy, Clone)]
+#[repr(C)]
 pub struct Color<T> {
     pub red: T,
     pub green: T,

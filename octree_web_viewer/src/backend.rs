@@ -137,8 +137,9 @@ impl iron::Handler for NodesData {
             assert!(node_data.meta.num_points as usize * 3 == node_data.color.len());
             pad(&mut reply_blob);
 
-            reply_blob.append(&mut node_data.position);
-            pad(&mut reply_blob);
+            // NOCOM(#sirver): broken
+            // reply_blob.append(&mut node_data.position);
+            // pad(&mut reply_blob);
 
             reply_blob.append(&mut node_data.color);
             pad(&mut reply_blob);

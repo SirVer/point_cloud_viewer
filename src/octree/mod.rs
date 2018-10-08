@@ -20,10 +20,11 @@ use fnv::FnvHashMap;
 use math::Cube;
 use proto;
 use protobuf;
+use {FfiPoint, decode_points};
 use std::cmp::Ordering;
 use std::collections::BinaryHeap;
 use std::fs::File;
-use std::io::{BufReader, Cursor, Read};
+use std::io::{Cursor, Read};
 use std::path::{Path, PathBuf};
 
 mod node;
@@ -80,8 +81,8 @@ fn relative_size_on_screen(bounding_cube: &Cube, matrix: &Matrix4<f32>) -> f32 {
 
 #[derive(Debug)]
 pub struct OnDiskOctree {
-    meta: OctreeMeta,
-    nodes: FnvHashMap<NodeId, NodeMeta>,
+    pub meta: OctreeMeta,
+    pub nodes: FnvHashMap<NodeId, NodeMeta>,
 }
 
 pub trait Octree: Send + Sync {
@@ -170,7 +171,7 @@ pub fn read_meta_proto<P: AsRef<Path>>(directory: P) -> Result<proto::Meta> {
 #[derive(Debug)]
 pub struct NodeData {
     pub meta: node::NodeMeta,
-    pub position: Vec<u8>,
+    pub position: Vec<f32>,
     pub color: Vec<u8>,
 }
 
@@ -367,27 +368,22 @@ impl Octree for OnDiskOctree {
     fn get_node_data(&self, node_id: &NodeId) -> Result<NodeData> {
         let stem = node_id.get_stem(&self.meta.directory);
 
-        // TODO(hrapp): If we'd randomize the points while writing, we could just read the
-        // first N points instead of reading everything and skipping over a few.
-        let position = {
-            let mut xyz_reader =
-                BufReader::new(File::open(&stem.with_extension(node::POSITION_EXT))?);
-            let mut all_data = Vec::new();
-            xyz_reader
-                .read_to_end(&mut all_data)
-                .chain_err(|| "Could not read position")?;
-            all_data
-        };
+        let num_points = self.nodes[node_id].num_points as usize;
+        let mut points = vec![FfiPoint::default(); num_points]; 
 
-        let color = {
-            let mut rgb_reader = BufReader::new(File::open(&stem.with_extension(node::COLOR_EXT))
-                .chain_err(|| "Could not read color")?);
-            let mut all_data = Vec::new();
-            rgb_reader
-                .read_to_end(&mut all_data)
-                .chain_err(|| "Could not read color")?;
-            all_data
-        };
+        let buffer = std::fs::read(stem.with_extension("data")).unwrap();
+
+        unsafe {
+            assert_eq!(0, decode_points(buffer.as_ptr(), buffer.len() as u32, num_points as u32, points.as_mut_ptr()));
+
+        }
+        let mut position=  Vec::with_capacity(num_points * 3);
+        let mut color =  Vec::with_capacity(num_points * 3);
+
+        for p in &points {
+            position.extend_from_slice(&p.position);
+            color.extend_from_slice(&p.color[0..3]);
+        }
 
         Ok(NodeData {
             position: position,

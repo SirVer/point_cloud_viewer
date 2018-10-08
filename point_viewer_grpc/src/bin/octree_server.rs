@@ -163,7 +163,8 @@ impl proto_grpc::Octree for OctreeService {
         resp.mut_node()
             .set_position_encoding(data.meta.position_encoding.to_proto());
         resp.mut_node().set_num_points(data.meta.num_points);
-        resp.set_position(data.position);
+        // NOCOM(#sirver): broken
+        // resp.set_position(data.position);
         resp.set_color(data.color);
         let f = sink.success(resp)
             .map_err(move |e| println!("failed to reply {:?}: {:?}", req, e));

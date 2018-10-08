@@ -45,6 +45,7 @@ pub trait InternalIterator {
 }
 
 #[derive(Debug, Clone)]
+#[repr(C)]
 pub struct Point {
     pub position: cgmath::Vector3<f32>,
     // TODO(sirver): Make color optional, we might not always have it.
@@ -56,3 +57,17 @@ pub struct Point {
 }
 
 pub use point_viewer_proto_rust::proto;
+
+#[repr(C)]
+#[derive(Default,Clone,Copy)]
+pub struct FfiPoint {
+    pub position: [f32; 3],
+    pub color: [u8; 4],
+    pub intensity: f32,
+}
+
+extern {
+    // NOCOM(#sirver): try this API by rewriting an existing octree and loading it.
+    pub fn encode_points(points: *const FfiPoint, count: u32, min_bits: u32, output: *mut u8, output_size: *mut i32) -> i32;
+    pub fn decode_points(buffer: *const u8, len: u32, expected_num_points: u32, points: *mut FfiPoint) -> i32;
+}
