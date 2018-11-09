@@ -149,7 +149,7 @@ pub fn read_meta_proto<P: AsRef<Path>>(directory: P) -> Result<proto::Meta> {
     // let mut data = Vec::new();
     // File::open(&directory.as_ref().join("meta.pb"))?.read_to_end(&mut data)?;
     Ok(
-        protobuf::parse_from_reader::<proto::Meta>(&mut Cursor::new(data))
+        protobuf::parse_from_reader::<proto::Meta>(&mut Cursor::new(&*data))
             .chain_err(|| "Could not parse meta.pb")?,
     )
 }
@@ -371,8 +371,8 @@ impl Octree for OnDiskOctree {
         };
 
         Ok(NodeData {
-            position: position,
-            color: color,
+            position: (&*position).to_vec(),
+            color: (&*color).to_vec(),
             meta: self.nodes[node_id].clone(),
         })
     }
