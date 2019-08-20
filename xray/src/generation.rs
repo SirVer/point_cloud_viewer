@@ -79,10 +79,10 @@ arg_enum! {
     #[derive(Debug)]
     #[allow(non_camel_case_types)]
     pub enum ColoringStrategyArgument {
-        xray,
         colored,
-        colored_with_intensity,
         colored_with_height_stddev,
+        colored_with_intensity,
+        xray,
     }
 }
 
@@ -97,28 +97,54 @@ arg_enum! {
 
 #[derive(Debug)]
 pub enum ColoringStrategyKind {
-    XRay,
     Colored,
+
+    // Colored in heat-map colors by stddev. Takes the max stddev to clamp on.
+    ColoredWithHeightStddev(f32),
 
     // Min and max intensities.
     ColoredWithIntensity(f32, f32),
 
-    // Colored in heat-map colors by stddev. Takes the max stddev to clamp on.
-    ColoredWithHeightStddev(f32),
+    XRay,
 }
 impl ColoringStrategyKind {
     pub fn new_strategy(&self) -> Box<dyn ColoringStrategy> {
         match *self {
-            ColoringStrategyKind::XRay => Box::new(XRayColoringStrategy::new()),
             ColoringStrategyKind::Colored => Box::new(PointColorColoringStrategy::default()),
-            ColoringStrategyKind::ColoredWithIntensity(min_intensity, max_intensity) => {
-                Box::new(IntensityColoringStrategy::new(min_intensity, max_intensity))
-            }
             ColoringStrategyKind::ColoredWithHeightStddev(max_stddev) => {
                 Box::new(HeightStddevColoringStrategy::new(max_stddev))
             }
+            ColoringStrategyKind::ColoredWithIntensity(min_intensity, max_intensity) => {
+                Box::new(IntensityColoringStrategy::new(min_intensity, max_intensity))
+            }
+            ColoringStrategyKind::XRay => Box::new(XRayColoringStrategy::new()),
         }
     }
+}
+
+fn process_point_data(
+    strategy: &mut dyn ColoringStrategy,
+    points_batch: &PointsBatch,
+    bbox: &Aabb3<f64>,
+    image_size: Vector2<u32>,
+    min_z: f64,
+    max_z: f64,
+) {
+    let mut discretized_locations = Vec::with_capacity(points_batch.position.len());
+    for pos in &points_batch.position {
+        if pos.z < min_z || pos.z > max_z {
+            continue;
+        }
+        // We want a right handed coordinate system with the x-axis of world and images aligning.
+        // This means that the y-axis aligns too, but the origin of the image space must be at the
+        // bottom left. Since images have their origin at the top left, we need actually have to
+        // invert y and go from the bottom of the image.
+        let x = (((pos.x - bbox.min().x) / bbox.dim().x) * f64::from(image_size.x)) as u32;
+        let y = ((1. - ((pos.y - bbox.min().y) / bbox.dim().y)) * f64::from(image_size.y)) as u32;
+        let z = (((pos.z - bbox.min().z) / bbox.dim().z) * NUM_Z_BUCKETS) as u32;
+        discretized_locations.push(Point3::new(x, y, z));
+    }
+    strategy.process_discretized_point_data(points_batch, discretized_locations)
 }
 
 pub trait ColoringStrategy: Send {
@@ -129,27 +155,6 @@ pub trait ColoringStrategy: Send {
         points_batch: &PointsBatch,
         discretized_locations: Vec<Point3<u32>>,
     );
-
-    fn process_point_data(
-        &mut self,
-        points_batch: &PointsBatch,
-        bbox: &Aabb3<f64>,
-        image_size: Vector2<u32>,
-    ) {
-        let mut discretized_locations = Vec::with_capacity(points_batch.position.len());
-        for pos in &points_batch.position {
-            // We want a right handed coordinate system with the x-axis of world and images aligning.
-            // This means that the y-axis aligns too, but the origin of the image space must be at the
-            // bottom left. Since images have their origin at the top left, we need actually have to
-            // invert y and go from the bottom of the image.
-            let x = (((pos.x - bbox.min().x) / bbox.dim().x) * f64::from(image_size.x)) as u32;
-            let y =
-                ((1. - ((pos.y - bbox.min().y) / bbox.dim().y)) * f64::from(image_size.y)) as u32;
-            let z = (((pos.z - bbox.min().z) / bbox.dim().z) * NUM_Z_BUCKETS) as u32;
-            discretized_locations.push(Point3::new(x, y, z));
-        }
-        self.process_discretized_point_data(points_batch, discretized_locations)
-    }
 
     // After all points are processed, this is used to query the color that should be assigned to
     // the pixel (x, y) in the final tile image.
@@ -453,6 +458,7 @@ pub struct Tile {
     pub resolution: f64,
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn xray_from_points(
     point_cloud_client: &PointCloudClient,
     global_from_local: &Option<Isometry3<f64>>,
@@ -461,6 +467,8 @@ pub fn xray_from_points(
     image_size: Vector2<u32>,
     mut coloring_strategy: Box<dyn ColoringStrategy>,
     tile_background_color: Color<u8>,
+    min_z: f64,
+    max_z: f64,
 ) -> bool {
     let mut seen_any_points = false;
     let point_location = PointQuery {
@@ -469,7 +477,14 @@ pub fn xray_from_points(
     };
     let _ = point_cloud_client.for_each_point_data(&point_location, |points_batch| {
         seen_any_points = true;
-        coloring_strategy.process_point_data(&points_batch, bbox, image_size);
+        process_point_data(
+            &mut *coloring_strategy,
+            &points_batch,
+            bbox,
+            image_size,
+            min_z,
+            max_z,
+        );
         Ok(())
     });
 
@@ -513,6 +528,7 @@ pub fn get_image_path(directory: &Path, id: NodeId) -> PathBuf {
     rv
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn build_xray_quadtree(
     pool: &Pool,
     point_cloud_client: &PointCloudClient,
@@ -521,6 +537,8 @@ pub fn build_xray_quadtree(
     tile: &Tile,
     coloring_strategy_kind: &ColoringStrategyKind,
     tile_background_color: Color<u8>,
+    min_z: f64,
+    max_z: f64,
 ) -> Result<(), Box<dyn Error>> {
     // Ignore errors, maybe directory is already there.
     let _ = fs::create_dir(output_directory);
@@ -533,6 +551,25 @@ pub fn build_xray_quadtree(
         }
         None => *point_cloud_client.bounding_box(),
     };
+    println!("Octree bounding box");
+    println!(
+        "  X: {} - {} ({})",
+        bounding_box.min().x,
+        bounding_box.max().x,
+        bounding_box.max().x - bounding_box.min().x
+    );
+    println!(
+        "  Y: {} - {} ({})",
+        bounding_box.min().y,
+        bounding_box.max().y,
+        bounding_box.max().y - bounding_box.min().y
+    );
+    println!(
+        "  Z: {} - {} ({})",
+        bounding_box.min().z,
+        bounding_box.max().z,
+        bounding_box.max().z - bounding_box.min().z
+    );
     let (bounding_rect, deepest_level) = find_quadtree_bounding_rect_and_levels(
         &bounding_box,
         f64::from(tile.size_px) * tile.resolution,
@@ -573,6 +610,8 @@ pub fn build_xray_quadtree(
                         Vector2::new(tile.size_px, tile.size_px),
                         strategy,
                         tile_background_color,
+                        min_z,
+                        max_z,
                     ) {
                         all_nodes_tx_clone.send(node.id).unwrap();
                         if let Some(id) = node.id.parent_id() {

@@ -33,6 +33,16 @@ fn parse_arguments<T: Extension>() -> clap::ArgMatches<'static> {
                 .help("Size of 1px in meters on the finest X-Ray level.")
                 .long("resolution")
                 .default_value("0.01"),
+            clap::Arg::with_name("min_z")
+                .help("The minimum_z value to keep in global frame. This can be used to slice out a few points.")
+                .long("min_z")
+                .default_value("-inf")
+                .takes_value(true),
+            clap::Arg::with_name("max_z")
+                .help("The minimum_z value to keep in global frame. This can be used to slice out a few points.")
+                .long("max_z")
+                .default_value("inf")
+                .takes_value(true),
             clap::Arg::with_name("num_threads")
                 .help("The number of threads used to shard X-Ray tile building.")
                 .takes_value(true)
@@ -106,6 +116,16 @@ pub fn run<T: Extension>(octree_factory: OctreeFactory) {
         .unwrap()
         .parse::<u32>()
         .expect("tile_size could not be parsed.");
+    let min_z = args
+        .value_of("min_z")
+        .unwrap()
+        .parse::<f64>()
+        .expect("min_z could not be parsed.");
+    let max_z = args
+        .value_of("max_z")
+        .unwrap()
+        .parse::<f64>()
+        .expect("max_z could not be parsed.");
     if !tile_size.is_power_of_two() {
         panic!("tile_size is not a power of two.");
     }
@@ -115,15 +135,15 @@ pub fn run<T: Extension>(octree_factory: OctreeFactory) {
         let arg = value_t!(args, "coloring_strategy", ColoringStrategyArgument)
             .expect("coloring_strategy is invalid");
         match arg {
-            xray => ColoringStrategyKind::XRay,
             colored => ColoringStrategyKind::Colored,
+            colored_with_height_stddev => ColoringStrategyKind::ColoredWithHeightStddev(
+                value_t!(args, "max_stddev", f32).unwrap_or(1.),
+            ),
             colored_with_intensity => ColoringStrategyKind::ColoredWithIntensity(
                 value_t!(args, "min_intensity", f32).unwrap_or(1.),
                 value_t!(args, "max_intensity", f32).unwrap_or(1.),
             ),
-            colored_with_height_stddev => ColoringStrategyKind::ColoredWithHeightStddev(
-                value_t!(args, "max_stddev", f32).unwrap_or(1.),
-            ),
+            xray => ColoringStrategyKind::XRay,
         }
     };
 
@@ -160,6 +180,8 @@ pub fn run<T: Extension>(octree_factory: OctreeFactory) {
         },
         &coloring_strategy_kind,
         tile_background_color,
+        min_z,
+        max_z,
     )
     .unwrap();
 }
